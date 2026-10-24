@@ -1,0 +1,160 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Altar Hindú Interactivo</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { touch-action: none; overscroll-behavior: none; overflow: hidden; position: fixed; width: 100%; height: 100%; }
+  body { background-image: url('fondo.gif'); background-repeat: repeat; background-size: 200px 200px; display: flex; justify-content: center; align-items: center; font-family: Arial, sans-serif; }
+
+  #altar { max-width: 100vw; max-height: 100vh; display: block; pointer-events: none; }
+
+  .objeto-altar {
+    position: fixed;
+    width: min(200px, 32vw);
+    z-index: 10;
+    pointer-events: auto;
+    touch-action: none;
+    user-select: none;
+    -webkit-user-select: none;
+    cursor: grab;
+    filter: drop-shadow(0 0 10px rgba(255,150,50,0.5));
+    transition: transform 0.15s ease, filter 0.15s ease;
+  }
+  #mano { width: min(260px, 42vw); }
+  #firefly { width: min(200px, 32vw); }
+
+  .objeto-altar.arrastrando {
+    transform: scale(1.1);
+    filter: drop-shadow(0 0 18px rgba(255,215,0,0.9));
+    cursor: grabbing;
+    z-index: 16;
+  }
+
+  #btn-subir {
+    position: fixed; top: 10px; right: 10px; z-index: 30;
+    background: rgba(0,0,0,0.8); border: 2px solid #ffd700; color: #ffd700;
+    padding: 14px 18px; border-radius: 25px; font-size: 16px; font-weight: bold;
+    cursor: pointer; touch-action: manipulation;
+  }
+  #btn-subir:active { background: #ffd700; color: #000; transform: scale(0.95); }
+  #input-gif { display: none; }
+
+  .sticker-wrapper { position: fixed; z-index: 15; touch-action: none; user-select: none; -webkit-user-select: none; }
+  .sticker { position: relative; max-width: 140px; max-height: 140px; filter: drop-shadow(0 0 8px rgba(255,215,0,0.6)); }
+  .sticker-wrapper:active .sticker { transform: scale(1.15); filter: drop-shadow(0 0 15px rgba(255,215,0,0.9)); z-index: 25; }
+
+  .btn-eliminar {
+    position: absolute; top: -10px; right: -10px; width: 28px; height: 28px;
+    background: #ff3333; color: white; border: 2px solid white; border-radius: 50%;
+    font-size: 16px; font-weight: bold; display: flex; align-items: center; justify-content: center;
+    cursor: pointer; z-index: 26; touch-action: manipulation;
+  }
+
+  #instrucciones {
+    position: fixed; top: 10px; left: 10px; right: 120px; color: #ffd700;
+    font-size: 13px; background: rgba(0,0,0,0.7); padding: 10px 14px;
+    border-radius: 20px; z-index: 20; pointer-events: none;
+  }
+</style>
+</head>
+<body>
+
+<p id="instrucciones">🕉️ Mantén presionada la mano o la lámpara para moverla | ✋ Arrastra los stickers</p>
+<button id="btn-subir">📤 Subir Sticker</button>
+<input type="file" id="input-gif" accept="image/gif,image/png,image/jpeg,image/webp">
+
+<img id="altar" src="altar.png" alt="Altar Hindú">
+<img class="objeto-altar" id="mano" src="mano.png" alt="Mano con incienso" style="left: 12vw; top: 45vh;">
+<img class="objeto-altar" id="firefly" src="Firefly.png" alt="Manos con lámpara" style="left: 62vw; top: 45vh;">
+
+<script>
+  const inputGif = document.getElementById('input-gif');
+  const btnSubir = document.getElementById('btn-subir');
+
+  let stickerActivo = null;
+  let stickerOffsetX = 0, stickerOffsetY = 0;
+
+  btnSubir.addEventListener('click', () => inputGif.click());
+  btnSubir.addEventListener('touchend', (e) => { e.preventDefault(); inputGif.click(); });
+
+  inputGif.addEventListener('change', (e) => {
+    const file = e.target.files[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onload = (event) => crearSticker(event.target.result);
+      reader.readAsDataURL(file);
+    }
+    inputGif.value = '';
+  });
+
+  function crearSticker(src) {
+    const wrapper = document.createElement('div');
+    wrapper.className = 'sticker-wrapper';
+    wrapper.style.padding = '20px';
+    wrapper.style.left = (window.innerWidth / 2 - 90) + 'px';
+    wrapper.style.top = (window.innerHeight / 2 - 90) + 'px';
+
+    const sticker = document.createElement('img');
+    sticker.src = src;
+    sticker.className = 'sticker';
+
+    const btnEliminar = document.createElement('button');
+    btnEliminar.className = 'btn-eliminar';
+    btnEliminar.textContent = '×';
+    btnEliminar.addEventListener('click', (e) => { e.stopPropagation(); wrapper.remove(); });
+    btnEliminar.addEventListener('touchend', (e) => { e.stopPropagation(); e.preventDefault(); wrapper.remove(); });
+
+    sticker.appendChild(btnEliminar);
+    wrapper.appendChild(sticker);
+    document.body.appendChild(wrapper);
+
+    wrapper.addEventListener('touchstart', iniciarArrastre, { passive: false });
+    wrapper.addEventListener('mousedown', iniciarArrastre);
+  }
+
+  function iniciarArrastre(e) {
+    if (e.target.classList.contains('btn-eliminar')) return;
+    e.preventDefault(); e.stopPropagation();
+    stickerActivo = e.currentTarget;
+    stickerActivo.classList.add('arrastrando');
+    const clientX = e.touches ? e.touches[0].clientX : e.clientX;
+    const clientY = e.touches ? e.touches[0].clientY : e.clientY;
+    const rect = stickerActivo.getBoundingClientRect();
+    stickerOffsetX = clientX - rect.left;
+    stickerOffsetY = clientY - rect.top;
+  }
+
+  function soltarArrastre() {
+    if (stickerActivo) stickerActivo.classList.remove('arrastrando');
+    stickerActivo = null;
+  }
+
+  document.addEventListener('touchmove', (e) => {
+    if (stickerActivo) {
+      e.preventDefault();
+      stickerActivo.style.left = (e.touches[0].clientX - stickerOffsetX) + 'px';
+      stickerActivo.style.top  = (e.touches[0].clientY - stickerOffsetY) + 'px';
+    }
+  }, { passive: false });
+
+  document.addEventListener('mousemove', (e) => {
+    if (stickerActivo) {
+      stickerActivo.style.left = (e.clientX - stickerOffsetX) + 'px';
+      stickerActivo.style.top  = (e.clientY - stickerOffsetY) + 'px';
+    }
+  });
+
+  document.addEventListener('touchend', soltarArrastre);
+  document.addEventListener('mouseup', soltarArrastre);
+
+  // Los objetos del altar solo se mueven mientras el usuario los mantiene presionados
+  document.querySelectorAll('.objeto-altar').forEach(objeto => {
+    objeto.addEventListener('touchstart', iniciarArrastre, { passive: false });
+    objeto.addEventListener('mousedown', iniciarArrastre);
+  });
+</script>
+</body>
+</html>
